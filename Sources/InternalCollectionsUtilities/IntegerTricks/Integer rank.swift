@@ -33,6 +33,12 @@ extension UInt {
     assert(UInt.bitWidth == 64 || UInt.bitWidth == 32,
            "Unsupported UInt bitWidth")
 
+    if UInt(bitPattern: n) < 2 {
+      let remaining = n == 0 ? self : self & (self &- 1)
+      guard remaining != 0 else { return nil }
+      return UInt(truncatingIfNeeded: remaining.trailingZeroBitCount)
+    }
+
     var shift: Self = 0
     var n = Self(truncatingIfNeeded: n)
 
