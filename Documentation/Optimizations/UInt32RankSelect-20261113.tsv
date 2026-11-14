@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0 WITH Swift-exception
+# Exact fork file compiled with Swift 6.2.1 -O; 120000 deterministic UInt32 masks, 8 iterations per sample, 5 independent process pairs, 11 warmed samples per binary.
+rank_group	process_1_ratio	process_2_ratio	process_3_ratio	process_4_ratio	process_5_ratio	median_ratio	performance_disposition
+0	0.299	0.337	0.336	0.322	0.331	0.331	IMPROVED_SAMPLE
+1	0.355	0.323	0.333	0.349	0.354	0.349	IMPROVED_SAMPLE
+2	1.092	0.976	1.023	1.056	1.061	1.056	REGRESSION_HOLD
+3	0.972	1.046	1.105	1.071	1.041	1.046	REGRESSION_HOLD
+12	1.000	1.021	1.123	1.060	1.031	1.031	REGRESSION_HOLD
+31	0.961	1.005	0.924	1.049	0.990	0.990	NEUTRAL_SAMPLE
+mixed	0.808	0.840	0.746	0.871	0.745	0.808	IMPROVED_SAMPLE
+# Swift baseline/candidate full-source oracle: 8388688 checks each, byte-identical optimized and debug stdout; output SHA256 aad95f038174ecf58fadc951922087d34d60bf212a0796d0deb89a32ec572ef9
+# Strict full SwiftPM/HashTreeCollections test run: NOT_RUN. Repo Package.swift requires 6.4; local compiler 6.2.1 and no local repository checkout.
+# New qualifying UInt64 source: 3145728 exhaustive/synthetic additional checks per baseline/candidate and per -O/-Onone build; output SHA256 4ab3dd3536e4881d8337ae0fd35ad71afd7c87a38b805d7a9e8df623b5feff39.
+UInt64_rank0	0.262	0.216	0.226	0.227	0.221	0.226	IMPROVED_SAMPLE
+UInt64_rank1	0.198	0.205	0.237	0.189	0.193	0.198	IMPROVED_SAMPLE
+UInt64_rank2	1.050	1.029	0.788	0.895	1.046	1.029	REGRESSION_SAMPLE
+UInt64_rank3	1.078	1.047	1.010	1.122	1.023	1.047	REGRESSION_HOLD
+UInt64_rank12	0.919	0.999	0.986	0.783	1.026	0.986	NEUTRAL_SAMPLE
+UInt64_rank31	0.890	1.116	0.938	1.060	0.878	0.938	VARIANT_SAMPLE
+UInt64_mixed	0.732	0.827	0.739	0.759	0.757	0.757	IMPROVED_SAMPLE
+# Rejected UInt16 expansion: high-rank ratios 1.111 (rank2), 1.225 (rank3), 1.174 (rank7); changes not admitted to the source.
+# Final qualified candidate Git blob 52a00e0dc60c43ddb3e1d74b2fe4c988d0c1dac2, SHA256 962abefa503734e8f10bc85d3017f675e14c23853ab00134a771c0f2d40dc34f.

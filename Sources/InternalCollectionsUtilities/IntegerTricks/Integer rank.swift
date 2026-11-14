@@ -33,6 +33,12 @@ extension UInt {
     assert(UInt.bitWidth == 64 || UInt.bitWidth == 32,
            "Unsupported UInt bitWidth")
 
+    if UInt(bitPattern: n) < 2 {
+      let remaining = n == 0 ? self : self & (self &- 1)
+      guard remaining != 0 else { return nil }
+      return UInt(truncatingIfNeeded: remaining.trailingZeroBitCount)
+    }
+
     var shift: Self = 0
     var n = Self(truncatingIfNeeded: n)
 
@@ -82,8 +88,14 @@ extension UInt32 {
   @_effects(releasenone)
   @usableFromInline
   package func _bit(ranked n: Int) -> UInt? {
-    // FIXME: Use bit deposit instruction when available (PDEP on Intel).
+    // Low rank is the common bucket-selection case: skip the staged popcounts.
     assert(n >= 0 && n < Self.bitWidth)
+    if UInt(bitPattern: n) < 2 {
+      let remaining = n == 0 ? self : self & (self &- 1)
+      guard remaining != 0 else { return nil }
+      return UInt(truncatingIfNeeded: remaining.trailingZeroBitCount)
+    }
+    // Retain the original staged rank descent for all other ordinals.
     var shift: Self = 0
     var n = Self(truncatingIfNeeded: n)
     let c16 = (self & 0xFFFF)._nonzeroBitCount
