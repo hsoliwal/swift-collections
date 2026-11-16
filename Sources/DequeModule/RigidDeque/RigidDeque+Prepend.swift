@@ -280,8 +280,11 @@ extension RigidDeque /*where Element: Copyable*/ {
   where S.Element == Element {
     var it = items.makeBorrowingIterator()
     return try self.prepend(addingCount: exactCount) { (target) throws(S.Failure) in
-      let span = try it.nextSpan(maxCount: target.freeCapacity)
-      target._append(copying: span)
+      while !target.isFull {
+        let span = try it.nextSpan(maxCount: target.freeCapacity)
+        if span.isEmpty { break }
+        target._append(copying: span)
+      }
     }
   }
 
@@ -318,7 +321,7 @@ extension RigidDeque /*where Element: Copyable*/ {
   /// This example prepends the elements of a `Range<Int>` instance
   /// to a rigid deque of integers.
   ///
-  ///     var numbers = RigidDeque<Int>(capacity: 10)
+  ///     var numbers = RigidDeque<Int>(capacity: 11)
   ///     numbers.append(copying: [1, 2, 3, 4, 5])
   ///     numbers.prepend(copying: 10...15)
   ///     // `numbers` now contains [10, 11, 12, 13, 14, 15, 1, 2, 3, 4, 5]
@@ -354,7 +357,7 @@ extension RigidDeque /*where Element: Copyable*/ {
   /// This example prepends the elements of a `Range<Int>` instance
   /// to a rigid deque of integers.
   ///
-  ///     var numbers = RigidDeque<Int>(capacity: 10)
+  ///     var numbers = RigidDeque<Int>(capacity: 11)
   ///     numbers.append(copying: [1, 2, 3, 4, 5])
   ///     numbers.prepend(copying: 10...15)
   ///     // `numbers` now contains [10, 11, 12, 13, 14, 15, 1, 2, 3, 4, 5]

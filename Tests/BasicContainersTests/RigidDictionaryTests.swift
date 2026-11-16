@@ -274,6 +274,27 @@ class RigidDictionaryTests: CollectionTestCase {
     }
   }
 
+  @available(SwiftStdlib 6.4, *)
+  func test_memoizedValue_returnsNewlyInsertedValue() {
+    // Inserting a new key can displace existing entries (by swapping them
+    // around in both small and hashed storage); `memoizedValue` must still
+    // return the value that was just inserted.
+    withEvery("capacity", in: [1, 2, 5, 7, 8, 20, 100]) { capacity in
+      var d = RigidDictionary<Int, String>(capacity: capacity)
+      withEvery("key", in: 0 ..< capacity) { key in
+        let v = d.memoizedValue(forKey: key) { "\($0)" }
+        expectEqual(v.value, "\(key)")
+      }
+      withEvery("key", in: 0 ..< capacity) { key in
+        let v = d.memoizedValue(forKey: key) { _ in
+          expectFailure("Cached value not found")
+          return ""
+        }
+        expectEqual(v.value, "\(key)")
+      }
+    }
+  }
+
   func test_keys() {
     typealias Key = LifetimeTracked<Int>
     typealias Value = LifetimeTracked<String>
@@ -528,6 +549,54 @@ class RigidDictionaryTests: CollectionTestCase {
         
         expectEqual(d.count, 0)
         expectEqual(d.capacity, capacity)
+      }
+    }
+  }
+
+  func test_hashable() {
+    typealias Key = LifetimeTrackedStruct<Int>
+    typealias Value = LifetimeTrackedStruct<Int>
+    let contents: [[Int: Int]] = [
+      [:], [0: 0], [1: 0], [0: 1], [0: 0, 1: 1], [0: 1, 1: 0], [0: 0, 1: 1, 2: 2],
+      Dictionary(uniqueKeysWithValues: (0 ..< 50).map { ($0, 2 * $0) }),
+    ]
+    withEvery("i", in: contents.indices) { i in
+      withEvery("j", in: contents.indices) { j in
+        withLifetimeTracking { tracker in
+          var a = RigidDictionary<Key, Value>(capacity: 100)
+          for (key, value) in contents[i].sorted(by: { $0.key < $1.key }) {
+            a.insertValue(
+              tracker.structInstance(for: value),
+              forKey: tracker.structInstance(for: key))
+          }
+          var b = RigidDictionary<Key, Value>(capacity: contents[j].count)
+          for (key, value) in contents[j].sorted(by: { $0.key > $1.key }) {
+            b.insertValue(
+              tracker.structInstance(for: value),
+              forKey: tracker.structInstance(for: key))
+          }
+          // FIXME: Use checkHashable when possible
+          var goodHash = false
+          for seed in 0 ..< 10 {
+            var ha = Hasher()
+            ha.combine(seed)
+            a.hash(into: &ha)
+            let hashValueA = ha.finalize()
+
+            var hb = Hasher()
+            hb.combine(seed)
+            b.hash(into: &hb)
+            let hashValueB = hb.finalize()
+
+            if contents[i] == contents[j] {
+              expectEqual(hashValueA, hashValueB)
+              goodHash = true
+            } else if hashValueA != hashValueB {
+              goodHash = true
+            }
+          }
+          expectTrue(goodHash, "Hashing does not differentiate between inequal containers")
+        }
       }
     }
   }

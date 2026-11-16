@@ -110,6 +110,45 @@ class RigidSetTests: CollectionTestCase {
     }
   }
 
+  func test_init_capacity_initializingWith() {
+    // Regression test for https://github.com/apple/swift-collections/issues/774:
+    // without the `UnstableContainersPreview` trait, `insert(addingCount:initializingWith:)`
+    // never terminated because the batch loop didn't update its `remainder` bookkeeping.
+    var calls = 0
+    let fillTwo: (inout OutputSpan<Int>) -> Void = { span in
+      calls += 1
+      span.append(1)
+      span.append(2)
+    }
+
+    // Exact fill: the batch fills its whole span.
+    let a = RigidSet<Int>(capacity: 2, initializingWith: fillTwo)
+    expectEqual(a.count, 2)
+    expectEqual(calls, 1)
+    expectTrue(a.contains(1))
+    expectTrue(a.contains(2))
+    expectConsistentSet(a)
+
+    // Short fill: the initializer stops before the span is full.
+    calls = 0
+    let b = RigidSet<Int>(capacity: 4, initializingWith: fillTwo)
+    expectEqual(b.count, 2)
+    expectEqual(calls, 1)
+    expectConsistentSet(b)
+
+    calls = 0
+    var c = RigidSet<Int>(capacity: 8)
+    c.insert(addingCount: 5, initializingWith: fillTwo)
+    expectEqual(c.count, 2)
+    expectEqual(calls, 1)
+    expectConsistentSet(c)
+
+    calls = 0
+    let d = UniqueSet<Int>(minimumCapacity: 4, initializingWith: fillTwo)
+    expectEqual(d.count, 2)
+    expectEqual(calls, 1)
+  }
+
   func test_insert_one_large() {
     withLifetimeTracking { tracker in
       var s = RigidSet<LifetimeTracked<Int>>(capacity: 20)
@@ -599,5 +638,38 @@ class RigidSetTests: CollectionTestCase {
       }
     }
   }
+  func test_hashable() {
+    let contents: [[Int]] = [[], [0], [1], [0, 1], [1, 0], [0, 1, 2], Array(0 ..< 50)]
+    withEvery("i", in: contents.indices) { i in
+      withEvery("j", in: contents.indices) { j in
+        var a = RigidSet<Int>(capacity: 100)
+        for item in contents[i] { a.insert(item) }
+        var b = RigidSet<Int>(capacity: contents[j].count)
+        for item in contents[j].reversed() { b.insert(item) }
+        // FIXME: Use checkHashable when possible
+        var goodHash = false
+        for seed in 0 ..< 10 {
+          var ha = Hasher()
+          ha.combine(seed)
+          a.hash(into: &ha)
+          let hashValueA = ha.finalize()
+
+          var hb = Hasher()
+          hb.combine(seed)
+          b.hash(into: &hb)
+          let hashValueB = hb.finalize()
+
+          if Set(contents[i]) == Set(contents[j]) {
+            expectEqual(hashValueA, hashValueB)
+            goodHash = true
+          } else if hashValueA != hashValueB {
+            goodHash = true
+          }
+        }
+        expectTrue(goodHash, "Hashing does not differentiate between inequal containers")
+      }
+    }
+  }
+
 }
 #endif

@@ -364,6 +364,58 @@ class UniqueDictionaryTests: CollectionTestCase {
     }
   }
   
+  func test_updateValue_closure_removal() {
+    // Removing an entry by setting the value to nil in
+    // `updateValue(forKey:with:)` must not destroy the (already moved-out)
+    // value a second time. Removing everything also exercises shrinking.
+    typealias Key = LifetimeTracked<Int>
+    typealias Value = LifetimeTracked<String>
+    withEvery("count", in: [1, 2, 10, 100, 200]) { count in
+      withLifetimeTracking { tracker in
+        var d = UniqueDictionary<Key, Value>()
+        for i in 0 ..< count {
+          d.insertValue(tracker.instance(for: "\(i)"), forKey: tracker.instance(for: i))
+        }
+        withEvery("key", in: 0 ..< count) { key in
+          let old = d.updateValue(forKey: tracker.instance(for: key)) { value in
+            let old = value?.payload
+            value = nil
+            return old
+          }
+          expectEqual(old, "\(key)")
+          expectEqual(d.count, count - key - 1)
+          expectTrue(d._checkInvariants())
+          for other in key + 1 ..< count {
+            expectEqual(
+              d.withValue(forKey: tracker.instance(for: other)) { $0.payload },
+              "\(other)")
+          }
+        }
+        expectEqual(d.count, 0)
+        expectEqual(tracker.instances, 0)
+      }
+    }
+  }
+  
+  @available(SwiftStdlib 6.4, *)
+  func test_memoizedValue_returnsNewlyInsertedValue() {
+    // Inserting a new key can displace existing entries (by swapping them
+    // around in both small and hashed storage); `memoizedValue` must still
+    // return the value that was just inserted.
+    var d = UniqueDictionary<Int, String>()
+    withEvery("key", in: 0 ..< 200) { key in
+      let v = d.memoizedValue(forKey: key) { "\($0)" }
+      expectEqual(v.value, "\(key)")
+    }
+    withEvery("key", in: 0 ..< 200) { key in
+      let v = d.memoizedValue(forKey: key) { _ in
+        expectFailure("Cached value not found")
+        return ""
+      }
+      expectEqual(v.value, "\(key)")
+    }
+  }
+
   func test_removeAll() {
     typealias Key = LifetimeTracked<Int>
     typealias Value = LifetimeTracked<String>
@@ -404,6 +456,86 @@ class UniqueDictionaryTests: CollectionTestCase {
     }
   }
 
+  func test_equatable() {
+    typealias Key = LifetimeTrackedStruct<Int>
+    typealias Value = LifetimeTrackedStruct<Int>
+    let contents: [[Int: Int]] = [
+      [:], [0: 0], [1: 0], [0: 1], [0: 0, 1: 1], [0: 1, 1: 0], [0: 0, 1: 1, 2: 2],
+      Dictionary(uniqueKeysWithValues: (0 ..< 50).map { ($0, 2 * $0) }),
+    ]
+    withEvery("i", in: contents.indices) { i in
+      withEvery("j", in: contents.indices) { j in
+        withLifetimeTracking { tracker in
+          var a = UniqueDictionary<Key, Value>()
+          for (key, value) in contents[i].sorted(by: { $0.key < $1.key }) {
+            a.insertValue(
+              tracker.structInstance(for: value),
+              forKey: tracker.structInstance(for: key))
+          }
+          var b = UniqueDictionary<Key, Value>(minimumCapacity: 100)
+          for (key, value) in contents[j].sorted(by: { $0.key > $1.key }) {
+            b.insertValue(
+              tracker.structInstance(for: value),
+              forKey: tracker.structInstance(for: key))
+          }
+          expectTrue(a.isTriviallyIdentical(to: a))
+          expectFalse(a.isTriviallyIdentical(to: b))
+          expectEqual(a == b, contents[i] == contents[j])
+          expectEqual(
+            a.isEqual(to: b, by: { $0.payload == $1.payload }),
+            contents[i] == contents[j])
+        }
+      }
+    }
+  }
+
+  func test_hashable() {
+    typealias Key = LifetimeTrackedStruct<Int>
+    typealias Value = LifetimeTrackedStruct<Int>
+    let contents: [[Int: Int]] = [
+      [:], [0: 0], [1: 0], [0: 1], [0: 0, 1: 1], [0: 1, 1: 0], [0: 0, 1: 1, 2: 2],
+      Dictionary(uniqueKeysWithValues: (0 ..< 50).map { ($0, 2 * $0) }),
+    ]
+    withEvery("i", in: contents.indices) { i in
+      withEvery("j", in: contents.indices) { j in
+        withLifetimeTracking { tracker in
+          var a = UniqueDictionary<Key, Value>()
+          for (key, value) in contents[i].sorted(by: { $0.key < $1.key }) {
+            a.insertValue(
+              tracker.structInstance(for: value),
+              forKey: tracker.structInstance(for: key))
+          }
+          var b = UniqueDictionary<Key, Value>(minimumCapacity: 100)
+          for (key, value) in contents[j].sorted(by: { $0.key > $1.key }) {
+            b.insertValue(
+              tracker.structInstance(for: value),
+              forKey: tracker.structInstance(for: key))
+          }
+          // FIXME: Use checkHashable when possible
+          var goodHash = false
+          for seed in 0 ..< 10 {
+            var ha = Hasher()
+            ha.combine(seed)
+            a.hash(into: &ha)
+            let hashValueA = ha.finalize()
+
+            var hb = Hasher()
+            hb.combine(seed)
+            b.hash(into: &hb)
+            let hashValueB = hb.finalize()
+
+            if contents[i] == contents[j] {
+              expectEqual(hashValueA, hashValueB)
+              goodHash = true
+            } else if hashValueA != hashValueB {
+              goodHash = true
+            }
+          }
+          expectTrue(goodHash, "Hashing does not differentiate between inequal containers")
+        }
+      }
+    }
+  }
 }
 
 #endif

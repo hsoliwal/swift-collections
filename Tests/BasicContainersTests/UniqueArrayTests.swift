@@ -87,6 +87,37 @@ class UniqueArrayTests: CollectionTestCase {
       }
     }
   }
+
+  @available(SwiftStdlib 6.4, *)
+  func test_validate_DrainableContainer() {
+    withSomeArrayLayouts("layout", ofCapacities: [0, 1, 3, 6]) { layout in
+      checkDrainableContainer(count: layout.count) { contents in
+        UniqueArray(layout: layout) { contents[$0] }
+      }
+    }
+  }
+
+  @available(SwiftStdlib 6.4, *)
+  func test_validate_MutableContainer() {
+    withSomeArrayLayouts("layout", ofCapacities: [0, 10, 100]) { layout in
+      withLifetimeTracking { tracker in
+        var items = UniqueArray(consuming: tracker.rigidArray(layout: layout))
+        let expected = (0 ..< layout.count).map { tracker.instance(for: $0) }
+        checkMutableContainer(&items, expectedContents: expected)
+      }
+    }
+  }
+
+  @available(SwiftStdlib 6.4, *)
+  func test_validate_PermutableContainer() {
+    withSomeArrayLayouts("layout", ofCapacities: [0, 10]) { layout in
+      withLifetimeTracking { tracker in
+        var items = UniqueArray(consuming: tracker.rigidArray(layout: layout))
+        let expected = (0 ..< layout.count).map { tracker.instance(for: $0) }
+        checkPermutableContainer(&items, expectedContents: expected)
+      }
+    }
+  }
 #endif
 
   func test_basics() {
@@ -295,10 +326,10 @@ class UniqueArrayTests: CollectionTestCase {
         let a = tracker.uniqueArray(layout: layout)
         let whole = a.span
         var i = 0
-        let first = a.span(after: &i)
+        let first = a.nextSpan(after: &i)
         expectEqual(i, layout.count)
         expectTrue(first.isIdentical(to: whole))
-        let second = a.span(after: &i)
+        let second = a.nextSpan(after: &i)
         expectEqual(i, layout.count)
         expectTrue(second.isEmpty)
       }
@@ -312,10 +343,10 @@ class UniqueArrayTests: CollectionTestCase {
         let a = tracker.uniqueArray(layout: layout)
         let whole = a.span
         var i = layout.count
-        let first = a.span(before: &i)
+        let first = a.previousSpan(before: &i)
         expectEqual(i, 0)
         expectTrue(first.isIdentical(to: whole))
-        let second = a.span(before: &i)
+        let second = a.previousSpan(before: &i)
         expectEqual(i, 0)
         expectTrue(second.isEmpty)
       }
@@ -328,10 +359,10 @@ class UniqueArrayTests: CollectionTestCase {
       withLifetimeTracking { tracker in
         var a = tracker.uniqueArray(layout: layout)
         var i = 0
-        var span = a.mutableSpan(after: &i)
+        var span = a.nextMutableSpan(after: &i)
         expectEqual(i, layout.count)
         expectEqual(span.count, layout.count)
-        span = a.mutableSpan(after: &i)
+        span = a.nextMutableSpan(after: &i)
         expectEqual(i, layout.count)
         expectTrue(span.isEmpty)
       }
@@ -781,6 +812,31 @@ class UniqueArrayTests: CollectionTestCase {
     }
   }
 
+  func test_append_moving_RigidArray() {
+    withSomeArrayLayouts("layout", ofCapacities: [0, 10, 100]) { layout in
+      withEvery("additions", in: [0, 1, 10, 100]) { additions in
+        withLifetimeTracking { tracker in
+          var a = tracker.uniqueArray(layout: layout)
+          var b = RigidArray(capacity: additions) { span in
+            for i in 0 ..< additions {
+              span.append(tracker.instance(for: layout.count + i))
+            }
+          }
+          let range = a.append(moving: &b)
+          let c = layout.count + additions
+          expectEqual(range, layout.count ..< c)
+          expectEqual(b.count, 0)
+          expectUniqueArrayContents(
+            a,
+            equivalentTo: 0 ..< c,
+            by: { $0.payload == $1 },
+            printer: { "\($0.payload)" })
+          expectEqual(tracker.instances, c)
+        }
+      }
+    }
+  }
+
 #if UnstableContainersPreview
 #if false // FIXME: Update
   func test_append_copying_Container() {
@@ -928,6 +984,26 @@ class UniqueArrayTests: CollectionTestCase {
   }
 #endif
 #endif
+
+  func test_replace_addingCount_partial_returnedRange() {
+    let fillTwo: (inout OutputSpan<Int>) -> Void = { span in
+      span.append(100)
+      span.append(101)
+    }
+
+    var a = UniqueArray<Int>()
+    let r1 = a.replaceSubrange(0 ..< 0, addingCount: 5, initializingWith: fillTwo)
+    expectEqual(r1, 0 ..< 2)
+    expectEqual(a.count, 2)
+
+    var b = RigidArray<Int>(capacity: 10)
+    b.append(0)
+    b.append(1)
+    b.append(2)
+    expectEqual(b.replaceSubrange(1 ..< 2, addingCount: 5, initializingWith: fillTwo), 1 ..< 3)
+    expectEqual(b.count, 4)
+    expectEqual(b.insert(addingCount: 5, at: 0, initializingWith: fillTwo), 0 ..< 2)
+  }
 
   func test_replace_copying_Collection() {
     withSomeArrayLayouts("layout", ofCapacities: [0, 5, 10]) { layout in

@@ -154,11 +154,13 @@ This trait enables the following types in the [`ContainersPreview`][ContainersPr
 - [`protocol RangeReplaceableContainer<Element>`][RangeReplaceableContainer] models a (potentially fixed capacity) container with insert/append/replace operations.
 - [`protocol DynamicContainer<Element>`][DynamicContainer] refines `RangeReplaceableContainer` to add operations that require dynamic storage sizing.
 - [`protocol Producer<Element, Failure>`][Producer] models a generative iterator -- an abstraction for producing items on demand.
-- [`protocol CountedProducer<Element, Failure>`][Producer] refines `Producer` to add a precise count of remaining elements.
+- [`protocol CountedProducer<Element, Failure>`][CountedProducer] refines `Producer` to add a precise count of remaining elements.
 - [`protocol Drain<Element>`][Drain] refines `CountedProducer` to model a source of in-place consumable elements -- primarily for use around container types.
 - [`protocol ContainerDrain<Element>`][ContainerDrain] refines `Drain` to allow retrieving a valid index after the items have been drained.
 - [`protocol RangeExpression2<Bound>`][RangeExpression2] refines the standard `RangeExpression` to support container subranges.
 
+[SpanPreview]: https://github.com/apple/swift-collections/tree/main/Sources/SpanPreview
+[InputSpan]: https://github.com/apple/swift-collections/blob/main/Sources/SpanPreview/InputSpan.swift
 [Container]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/Container/Container.swift
 [BidirectionalContainer]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/Container/Container.swift
 [RandomAccessContainer]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/Container/RandomAccessContainer.swift
@@ -167,11 +169,11 @@ This trait enables the following types in the [`ContainersPreview`][ContainersPr
 [DrainableContainer]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/Container/DrainableContainer.swift
 [RangeReplaceableContainer]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/Container/RangeReplaceableContainer.swift
 [DynamicContainer]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/Container/DynamicContainer.swift
-[Producer]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/Producer.swift
-[CountedProducer]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/CountedProducer.swift
-[Drain]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/Drain.swift
-[ContainerDrain]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/ContainerDrain.swift
-[RangeExpression2]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/RangeExpression2.swift
+[Producer]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/Producer/Producer.swift
+[CountedProducer]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/Producer/CountedProducer.swift
+[Drain]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/Drain/Drain.swift
+[ContainerDrain]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/Drain/ContainerDrain.swift
+[RangeExpression2]: https://github.com/apple/swift-collections/blob/main/Sources/ContainersPreview/Protocols/Container/RangeExpression2.swift
 
 The trait also enables a large list of new APIs throughout the package that make use of these constructs -- such as generic methods for transferring items between container types, and implementations of the classic `map`/`reduce`/`filter`/etc algorithms.
 
@@ -263,6 +265,8 @@ The following table maps package releases to their minimum required Swift toolch
 We make an effort to ensure that each new minor package version supports the most recent three major Swift versions at the time of its release.
 
 (Note: the package has no minimum deployment target, so while it does require clients to use a recent Swift toolchain to build it, the code itself is able to run on any OS release that supports running Swift code.)
+
+When deploying standalone macOS executables or frameworks built with Swift 6.2 or later to systems older than macOS 26, you may need to install Swift backdeployment libraries alongside your binaries. In particular, a binary that links to `@rpath/libswiftCompatibilitySpan.dylib` needs that library in a location covered by its runtime search paths. Xcode handles this for app bundles, but standalone binaries need their deployment process to provide it. See the [maintainer's deployment guidance](https://github.com/apple/swift-collections/issues/732#issuecomment-5823499281) for details.
 
 Select features may require a more recent compiler than the minimum specified above. (For example, `RigidArray` only works on Swift 6.2 or better.)
 

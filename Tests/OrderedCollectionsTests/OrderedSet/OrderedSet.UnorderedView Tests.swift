@@ -23,6 +23,23 @@ import _CollectionsTestSupport
 // extension OrderedSet.UnorderedView: SetAPIChecker {}
 
 class OrderedSetUnorderedViewTests: CollectionTestCase {
+  func test_Equatable_Hashable() {
+    let samples: [[OrderedSet<Int>]] = [
+      [[], OrderedSet(minimumCapacity: 100, persistent: true)],
+      [[1], OrderedSet(_scale: 5, bias: 7, contents: [1])],
+      [[2], [2]],
+      [[1, 2], [2, 1]],
+      [[1, 2, 3], [3, 1, 2],
+       OrderedSet(_scale: 5, bias: 3, contents: [2, 3, 1])],
+      [[1, 2, 4], [4, 2, 1]],
+      [OrderedSet(0 ..< 15),
+       OrderedSet(_scale: 5, bias: 0, contents: (0 ..< 15).reversed())],
+      [OrderedSet(0 ..< 16), OrderedSet((0 ..< 16).reversed())],
+      [OrderedSet(1 ..< 17), OrderedSet((1 ..< 17).reversed())],
+    ]
+    checkHashable(equivalenceClasses: samples.map { $0.map { $0.unordered }})
+  }
+
   func test_unordered_insert() {
     withEvery("count", in: 0 ..< 20) { count in
       withEvery("dupes", in: 1 ... 3) { dupes in
@@ -83,5 +100,12 @@ class OrderedSetUnorderedViewTests: CollectionTestCase {
       expectTrue(set.contains(30))
       expectFalse(copy.contains(30))
     }
+  }
+
+  func test_SetAlgebraMemberIdentity() {
+    checkSetAlgebraMemberIdentity(
+      OrderedSet<LifetimeTracked<Int>>.UnorderedView.self,
+      models: [[], [0], [0, 1, 2, 3], Set(stride(from: 0, to: 200, by: 2))],
+      members: { Array(OrderedSet($0)) })
   }
 }

@@ -270,8 +270,11 @@ extension UniqueDeque /*where Element: Copyable*/ {
   where S.Element == Element {
     var it = items.makeBorrowingIterator()
     return try self.prepend(addingCount: exactCount) { (target) throws(S.Failure) in
-      let span = try it.nextSpan(maxCount: target.freeCapacity)
-      target._append(copying: span)
+      while !target.isFull {
+        let span = try it.nextSpan(maxCount: target.freeCapacity)
+        if span.isEmpty { break }
+        target._append(copying: span)
+      }
     }
   }
 
@@ -359,6 +362,7 @@ extension UniqueDeque /*where Element: Copyable*/ {
   ///     invocations on the same deque.
   @inlinable
   @_alwaysEmitIntoClient
+  @discardableResult
   public mutating func prepend(
     copying items: some Collection<Element>
   ) -> Range<Int> {
@@ -373,7 +377,7 @@ extension UniqueDeque /*where Element: Copyable*/ {
   }
 
 #if compiler(>=6.4)
-  /// Copies the elements of a borrowing sequence to the end of this deque.
+  /// Copies the elements of a borrowing sequence to the front of this deque.
   ///
   /// If the deque does not have sufficient capacity to hold all items in the
   /// sequence, then this triggers a runtime error.
@@ -392,7 +396,7 @@ extension UniqueDeque /*where Element: Copyable*/ {
     try self._prepend(copying: items)
   }
 
-  /// Copies the elements of a borrowing sequence to the end of this deque.
+  /// Copies the elements of a borrowing sequence to the front of this deque.
   ///
   /// If the deque does not have sufficient capacity to hold all items in the
   /// sequence, then this triggers a runtime error.
