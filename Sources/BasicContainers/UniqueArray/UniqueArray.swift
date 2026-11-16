@@ -15,24 +15,6 @@
 import InternalCollectionsUtilities
 #endif
 
-#if compiler(<6.2)
-
-/// A dynamically self-resizing, heap allocated, noncopyable array
-/// of potentially noncopyable elements.
-@frozen
-@available(*, unavailable, message: "UniqueArray requires a Swift 6.2 toolchain")
-public struct UniqueArray<Element: ~Copyable>: ~Copyable {
-  @usableFromInline
-  package var _storage: RigidArray<Element>
-
-  @inlinable
-  public init() {
-    fatalError()
-  }
-}
-
-#else
-
 /// A dynamically self-resizing, heap allocated, noncopyable array of
 /// potentially noncopyable elements.
 ///
@@ -155,84 +137,6 @@ extension UniqueArray where Element: ~Copyable {
   }
 }
 
-//MARK: - Container primitives
-
-@available(SwiftStdlib 5.0, *)
-extension UniqueArray where Element: ~Copyable {
-  /// Return a borrowing span over the maximal storage chunk following the
-  /// specified position in the array.
-  ///
-  /// The returned span provides direct read-only access to all array elements
-  /// in the range `index ..< count`.
-  ///
-  /// - Parameter index: A valid index in the array, including the end index.
-  ///   When `span(after:)` returns, `index` is equal to the array's
-  ///   `endIndex`.
-  ///
-  /// - Complexity: O(1)
-  @inlinable
-  @_lifetime(borrow self)
-  public func span(after index: inout Int) -> Span<Element> {
-    _storage.span(after: &index)
-  }
-
-  /// Return a borrowing span over the maximal storage chunk preceding the
-  /// specified position in the array.
-  ///
-  /// The returned span provides direct read-only access to all array elements
-  /// in the range `0 ..< index`.
-  ///
-  /// - Parameter index: A valid index in the array, including the end index.
-  ///   When `span(before:)` returns, `index` is equal to the array's
-  ///   `startIndex`.
-  ///
-  /// - Complexity: O(1)
-  @inlinable
-  @_lifetime(borrow self)
-  public func span(before index: inout Int) -> Span<Element> {
-    _storage.span(before: &index)
-  }
-}
-
-@available(SwiftStdlib 5.0, *)
-extension UniqueArray where Element: ~Copyable {
-  /// Return a mutable span over the maximal storage chunk following the
-  /// specified position in the array.
-  ///
-  /// The returned span provides direct mutating access to all array elements
-  /// in the range `index ..< count`.
-  ///
-  /// - Parameter index: A valid index in the array, including the end index.
-  ///   When `mutableSpan(after:)` returns, `index` is equal to the array's
-  ///   `endIndex`.
-  ///
-  /// - Complexity: O(1)
-  @_lifetime(&self)
-  public mutating func mutableSpan(
-    after index: inout Int
-  ) -> MutableSpan<Element> {
-    _storage.mutableSpan(after: &index)
-  }
-
-  /// Return a mutable span over the maximal storage chunk preceding the specified
-  /// position in the array.
-  ///
-  /// The returned span provides direct mutating access to all array elements
-  /// in the range `0 ..< index`.
-  ///
-  /// - Parameter index: A valid index in the array, including the end index.
-  ///   When `mutableSpan(before:)` returns, `index` is equal to the array's
-  ///   `startIndex`.
-  ///
-  /// - Complexity: O(1)
-  @_lifetime(&self)
-  public mutating func mutableSpan(
-    before index: inout Int
-  ) -> MutableSpan<Element> {
-    _storage.mutableSpan(before: &index)
-  }
-}
-
 //MARK: - Resizing
 
 @_alwaysEmitIntoClient
@@ -323,4 +227,3 @@ extension UniqueArray {
     UniqueArray(consuming: _storage.clone(capacity: capacity))
   }
 }
-#endif

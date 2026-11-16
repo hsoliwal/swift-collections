@@ -418,7 +418,7 @@ extension _UnsafeDequeHandle where Element: ~Copyable {
       towards: startOffset <= wrapOffset ? 0 : wrapOffset,
       maxDistance: maxDistance,
       limitedBy: limitOffset)
-    return (p, p &- startOffset)
+    return (p, startOffset &- p)
   }
 
   @_alwaysEmitIntoClient
@@ -1314,7 +1314,7 @@ extension _UnsafeDequeHandle where Element: ~Copyable {
 @available(SwiftStdlib 5.0, *)
 extension _UnsafeDequeHandle where Element: ~Copyable {
   @_alwaysEmitIntoClient
-  internal mutating func uncheckedInsert<E: Error>(
+  package mutating func uncheckedInsert<E: Error>(
     addingCount newItemCount: Int,
     at offset: Int,
     initializingWith body: (inout OutputSpan<Element>) throws(E) -> Void

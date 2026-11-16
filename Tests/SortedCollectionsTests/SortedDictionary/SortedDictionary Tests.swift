@@ -240,6 +240,33 @@ final class SortedDictionaryTests: CollectionTestCase {
     }
   }
 
+  func test_repeatedRemoveAtIndex() {
+    // Removing by index has to keep rebalancing the tree, or a leaf eventually
+    // runs out of elements. (https://github.com/apple/swift-collections/issues/809)
+    func pickFirst(_ count: Int) -> Int { 0 }
+    func pickLast(_ count: Int) -> Int { count - 1 }
+    func pickMiddle(_ count: Int) -> Int { count / 2 }
+
+    withEvery("count", in: 0 ..< 60) { count in
+      withEvery("pick", in: [pickFirst, pickLast, pickMiddle]) { pick in
+        var sorted = SortedDictionary(keysWithValues: (0 ..< count).map { ($0, $0 * 2) })
+        var comparisonKeys = Array(0 ..< count)
+
+        while !comparisonKeys.isEmpty {
+          let offset = pick(comparisonKeys.count)
+          let removed = sorted.remove(at: sorted.index(sorted.startIndex, offsetBy: offset))
+          let key = comparisonKeys.remove(at: offset)
+
+          expectEqual(removed.key, key)
+          expectEqual(removed.value, key * 2)
+          expectEqual(sorted.count, comparisonKeys.count)
+          expectEqualElements(sorted.map { $0.key }, comparisonKeys)
+          expectEqualElements(sorted.map { $0.value }, comparisonKeys.map { $0 * 2 })
+        }
+      }
+    }
+  }
+
   func test_modifySubscriptRemoval() {
     func modify(_ value: inout Int?, setTo newValue: Int?) {
       value = newValue
@@ -263,6 +290,22 @@ final class SortedDictionaryTests: CollectionTestCase {
         }
       }
     }
+  }
+
+  func test_modifySubscriptRemovalOfRootKey() {
+    // In debug builds, leaves hold up to 5 keys and internal nodes up to 4.
+    var d = SortedDictionary<Int, Int>()
+    for i in 0 ..< 6 { d[i] = i }  // root [2], leaves [0, 1] and [3, 4, 5]
+    d[5] = nil  // both leaves now hold the minimum of 2 keys
+
+    // Removing the root key merges the root's only two children.
+    let removed = d[2].take()
+    expectEqual(removed, 2)
+    expectEqual(d.count, 4)
+    expectEqualElements(d.map { $0.key }, [0, 1, 3, 4])
+
+    d[2] = 2
+    expectEqualElements(d.map { $0.key }, [0, 1, 2, 3, 4])
   }
 
   func test_modifySubscriptInsertUpdate() {

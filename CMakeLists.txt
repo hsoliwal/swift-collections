@@ -11,7 +11,8 @@
 ##
 ##===----------------------------------------------------------------------===##
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.29)
+
 project(SwiftCollections
   LANGUAGES C Swift)
 
@@ -63,8 +64,6 @@ set(collections_swift_flags
   "-enable-experimental-feature BuiltinModule"
   "-enable-experimental-feature Lifetimes"
   "-enable-experimental-feature InoutLifetimeDependence"
-  "-enable-experimental-feature AddressableParameters"
-  "-enable-experimental-feature AddressableTypes"
   "-enable-experimental-feature SuppressedAssociatedTypesWithDefaults"
 )
 foreach(flag ${collections_swift_flags})

@@ -87,6 +87,47 @@ class RigidArrayTests: CollectionTestCase {
     }
   }
 
+#if compiler(>=6.4) && UnstableContainersPreview
+  @available(SwiftStdlib 6.4, *)
+  func test_validate_DrainableContainer() {
+    withSomeArrayLayouts("layout", ofCapacities: [0, 1, 3, 6]) { layout in
+      checkDrainableContainer(count: layout.count) { contents in
+        RigidArray(layout: layout) { contents[$0] }
+      }
+    }
+  }
+
+  @available(SwiftStdlib 6.4, *)
+  func test_validate_MutableContainer() {
+    withSomeArrayLayouts("layout", ofCapacities: [0, 10, 100]) { layout in
+      withLifetimeTracking { tracker in
+        var items = tracker.rigidArray(layout: layout)
+        let expected = (0 ..< layout.count).map { tracker.instance(for: $0) }
+        checkMutableContainer(&items, expectedContents: expected)
+      }
+    }
+  }
+
+  @available(SwiftStdlib 6.4, *)
+  func test_validate_PermutableContainer() {
+    withSomeArrayLayouts("layout", ofCapacities: [0, 10]) { layout in
+      withLifetimeTracking { tracker in
+        var items = tracker.rigidArray(layout: layout)
+        let expected = (0 ..< layout.count).map { tracker.instance(for: $0) }
+        checkPermutableContainer(&items, expectedContents: expected)
+        var span = items.mutableSpan
+        checkPermutableContainer(&span, expectedContents: expected)
+        tracker.withInputSpan(layout: layout, using: { $0 }) { span in
+          checkPermutableContainer(&span, expectedContents: expected)
+        }
+        tracker.withOutputSpan(layout: layout, using: { $0 }) { span in
+          checkPermutableContainer(&span, expectedContents: expected)
+        }
+      }
+    }
+  }
+#endif
+
   func test_empty() {
     let a = RigidArray<Int>()
     expectEqual(a.capacity, 0)
@@ -255,50 +296,160 @@ class RigidArrayTests: CollectionTestCase {
     }
   }
 
-  func test_nextSpan() {
-    // RigidArray is expected to have exactly one span.
+  func test_nextSpan_after() {
     withSomeArrayLayouts("layout", ofCapacities: [0, 10, 100]) { layout in
       withLifetimeTracking { tracker in
         let a = tracker.rigidArray(layout: layout)
         let whole = a.span
-        var i = 0
-        let first = a.span(after: &i)
-        expectEqual(i, layout.count)
-        expectTrue(first.isIdentical(to: whole))
-        let second = a.span(after: &i)
-        expectEqual(i, layout.count)
-        expectTrue(second.isEmpty)
+        withEvery("i", in: 0 ... layout.count) { i in
+          var j = i
+          let span = a.nextSpan(after: &j)
+          expectEqual(j, layout.count)
+          expectTrue(span.isIdentical(to: whole.extracting(i...)))
+
+          let second = a.nextSpan(after: &j)
+          expectEqual(j, layout.count)
+          expectTrue(second.isEmpty)
+        }
       }
     }
   }
 
-  func test_previousSpan() {
-    // RigidArray is expected to have exactly one span.
+#if compiler(>=6.4) && UnstableContainersPreview
+  @available(SwiftStdlib 6.4, *)
+  func test_nextSpan_after_maxCount() {
     withSomeArrayLayouts("layout", ofCapacities: [0, 10, 100]) { layout in
       withLifetimeTracking { tracker in
         let a = tracker.rigidArray(layout: layout)
         let whole = a.span
-        var i = layout.count
-        let first = a.span(before: &i)
-        expectEqual(i, 0)
-        expectTrue(first.isIdentical(to: whole))
-        let second = a.span(before: &i)
-        expectEqual(i, 0)
-        expectTrue(second.isEmpty)
+        withEvery("i", in: 0 ... layout.count) { i in
+          withEvery(
+            "maxCount",
+            in: ([1, 2, layout.count / 2, layout.count, Int.max] as Set).filter { $0 > 0 }
+          ) { maxCount in
+            let expected = i + Swift.min(maxCount, layout.count - i)
+
+            var j = i
+            let span = a.nextSpan(after: &j, maxCount: maxCount)
+            expectEqual(j, expected)
+            expectTrue(span.isIdentical(to: whole.extracting(i ..< expected)))
+          }
+        }
       }
     }
   }
+#endif
+
+  func test_nextSpan_after_maxCount_limitedBy() {
+    withSomeArrayLayouts("layout", ofCapacities: [0, 10, 100]) { layout in
+      withLifetimeTracking { tracker in
+        let a = tracker.rigidArray(layout: layout)
+        let whole = a.span
+        withEvery("i", in: 0 ... layout.count) { i in
+          withEvery(
+            "maxCount",
+            in: ([1, 2, layout.count / 2, layout.count, Int.max] as Set).filter { $0 > 0 }
+          ) { maxCount in
+            withEvery("limit", in: 0 ... layout.count) { limit in
+              var expected = i + Swift.min(maxCount, layout.count - i)
+              if limit >= i {
+                expected = Swift.min(limit, expected)
+              }
+
+              var j = i
+              let span = a.nextSpan(after: &j, maxCount: maxCount, limitedBy: limit)
+              expectEqual(j, expected)
+              expectTrue(span.isIdentical(to: whole.extracting(i ..< expected)))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  func test_previousSpan_before() {
+    withSomeArrayLayouts("layout", ofCapacities: [0, 10, 100]) { layout in
+      withLifetimeTracking { tracker in
+        let a = tracker.rigidArray(layout: layout)
+        let whole = a.span
+        withEvery("i", in: 0 ... layout.count) { i in
+          var j = i
+          let first = a.previousSpan(before: &j)
+          expectEqual(j, 0)
+          expectTrue(first.isIdentical(to: whole.extracting(0 ..< i)))
+          let second = a.previousSpan(before: &j)
+          expectEqual(j, 0)
+          expectTrue(second.isEmpty)
+        }
+      }
+    }
+  }
+
+  func test_previousSpan_before_maxCount() {
+    withSomeArrayLayouts("layout", ofCapacities: [0, 10, 100]) { layout in
+      withLifetimeTracking { tracker in
+        let a = tracker.rigidArray(layout: layout)
+        let whole = a.span
+        withEvery("i", in: 0 ... layout.count) { i in
+          withEvery(
+            "maxCount",
+            in: ([1, 2, layout.count / 2, layout.count, Int.max] as Set).filter { $0 > 0 }
+          ) { maxCount in
+            let expected = Swift.max(0, i - maxCount)
+
+            var j = i
+            let span = a.previousSpan(before: &j, maxCount: maxCount)
+            expectEqual(j, expected)
+            expectTrue(span.isIdentical(to: whole.extracting(expected ..< i)))
+          }
+        }
+      }
+    }
+  }
+
+#if compiler(>=6.4) && UnstableContainersPreview
+  @available(SwiftStdlib 6.4, *)
+  func test_previousSpan_before_maxCount_limitedBy() {
+    withSomeArrayLayouts("layout", ofCapacities: [0, 10, 100]) { layout in
+      withLifetimeTracking { tracker in
+        let a = tracker.rigidArray(layout: layout)
+        let whole = a.span
+        withEvery("i", in: 0 ... layout.count) { i in
+          withEvery(
+            "maxCount",
+            in: ([1, 2, layout.count / 2, layout.count, Int.max] as Set).filter { $0 > 0 }
+          ) { maxCount in
+            withEvery("limit", in: 0 ... layout.count) { limit in
+              var expected = Swift.max(0, i - maxCount)
+              if limit <= i {
+                expected = Swift.max(limit, expected)
+              }
+
+              var j = i
+              let span = a.previousSpan(before: &j, maxCount: maxCount, limitedBy: limit)
+              expectEqual(j, expected)
+              if expected == i {
+                expectTrue(span.isEmpty)
+              } else {
+                expectTrue(span.isIdentical(to: whole.extracting(expected ..< i)))
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+#endif
 
   func test_nextMutableSpan() {
-    // RigidArray is expected to have exactly one span.
     withSomeArrayLayouts("layout", ofCapacities: [0, 10, 100]) { layout in
       withLifetimeTracking { tracker in
         var a = tracker.rigidArray(layout: layout)
         var i = 0
-        var span = a.mutableSpan(after: &i)
+        var span = a.nextMutableSpan(after: &i)
         expectEqual(i, layout.count)
         expectEqual(span.count, layout.count)
-        span = a.mutableSpan(after: &i)
+        span = a.nextMutableSpan(after: &i)
         expectEqual(i, layout.count)
         expectTrue(span.isEmpty)
       }
@@ -1226,8 +1377,11 @@ class RigidArrayTests: CollectionTestCase {
 
             var a = tracker.rigidArray(layout: layout)
             let rigidAddition = StaccatoContainer(
-              contents: tracker.instances(for: addition),
-              spanCounts: [spanCount])
+              count: addition.count,
+              spanCounts: [spanCount]
+            ) {
+              tracker.instance(for: addition[$0])
+            }
             a.insert(copying: rigidAddition, at: i)
 
             expectRigidArrayContents(
@@ -1282,13 +1436,14 @@ class RigidArrayTests: CollectionTestCase {
             withLifetimeTracking { tracker in
               var a = tracker.rigidArray(layout: layout)
 
-              a.replaceSubrange(subrange, addingCount: c) { target in
+              let r = a.replaceSubrange(subrange, addingCount: c) { target in
                 expectTrue(target.isEmpty)
                 expectEqual(target.freeCapacity, c)
                 for i in 0 ..< n {
                   target.append(tracker.instance(for: layout.count + i))
                 }
               }
+              expectEqual(r, subrange.lowerBound ..< subrange.lowerBound + n)
               expectEqual(a.count, layout.count - subrange.count + n)
 
               var expected = Array(0 ..< layout.count)
@@ -1356,7 +1511,7 @@ class RigidArrayTests: CollectionTestCase {
             withLifetimeTracking { tracker in
               var a = tracker.rigidArray(layout: layout)
 
-              a.replaceSubrange(
+              let r = a.replaceSubrange(
                 subrange,
                 consumingWith: { span in
                   for i in 0 ..< subrange.count {
@@ -1373,6 +1528,7 @@ class RigidArrayTests: CollectionTestCase {
                 }
               }
 
+              expectEqual(r, subrange.lowerBound ..< subrange.lowerBound + n)
               expectEqual(a.count, layout.count - subrange.count + n)
               expectEqual(tracker.instances, layout.count - subrange.count + n)
 
@@ -1459,8 +1615,11 @@ class RigidArrayTests: CollectionTestCase {
 
               var a = tracker.rigidArray(layout: layout)
               let trackedAddition = StaccatoContainer(
-                contents: RigidArray(copying: addition.map { tracker.instance(for: $0) }),
-                spanCounts: [spanCount])
+                count: addition.count,
+                spanCounts: [spanCount]
+              ) {
+                tracker.instance(for: addition[$0])
+              }
               a.replaceSubrange(range, copying: trackedAddition)
 
               expectRigidArrayContents(
@@ -1504,6 +1663,22 @@ class RigidArrayTests: CollectionTestCase {
 
     let expected = (0 ..< c).filter { !$0.isMultiple(of: 6) }
     expectUniqueArrayContents(transformed, equalTo: expected)
+  }
+#endif
+
+#if compiler(>=6.4) && UnstableContainersPreview
+  @available(SwiftStdlib 6.4, *)
+  func test_init_capacity_from_Producer() {
+    // FIXME: Create a separate test suite for BorrowingIteratorProtocol.map, and devise a specific test for .init(capacity:from:)
+    struct E: Error {}
+    let c = 10
+    let items = RigidArray<Int>(capacity: c, copying: 0 ..< c)
+    let p = items.makeBorrowingIterator()
+      .mapError(to: E.self)
+      .map { (x: borrowing Int) -> Int in copy x }
+    let result = try! RigidArray<Int>(capacity: c, from: p)
+    expectEqual(result.count, c)
+    expectRigidArrayContents(result, equalTo: 0 ..< c)
   }
 #endif
 

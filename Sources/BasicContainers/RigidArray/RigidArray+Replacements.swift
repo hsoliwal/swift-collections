@@ -82,7 +82,7 @@ extension RigidArray where Element: ~Copyable {
     initializingWith initializer: (inout OutputSpan<Element>) throws(E) -> Void
   ) throws(E) -> Range<Int> {
     // Destroy removed items
-    unsafe _items.extracting(subrange).deinitialize()
+    unsafe _items.extracting(subrange)._deinitializeElements()
     let target = unsafe _resizeGap(in: subrange, to: newItemCount)
     var span = unsafe OutputSpan(buffer: target, initializedCount: 0)
     defer {
@@ -96,8 +96,7 @@ extension RigidArray where Element: ~Copyable {
       span = OutputSpan()
     }
     try initializer(&span)
-    return unsafe Range(uncheckedBounds: (
-      subrange.lowerBound, subrange.lowerBound + newItemCount))
+    return subrange.lowerBound ..< (subrange.lowerBound + span.count)
   }
 }
 
@@ -201,9 +200,8 @@ extension RigidArray where Element: ~Copyable {
         span = OutputSpan()
       }
       try initializer(&span)
+      return subrange.lowerBound ..< (subrange.lowerBound + span.count)
     }
-    return unsafe Range(uncheckedBounds: (
-      subrange.lowerBound, subrange.lowerBound + newItemCount))
   }
 #endif
 }

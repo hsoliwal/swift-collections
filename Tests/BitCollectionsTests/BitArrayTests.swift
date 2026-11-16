@@ -259,6 +259,54 @@ final class BitArrayTests: CollectionTestCase {
     }
   }
 
+  func test_conversion_to_wide_BinaryInteger() {
+    guard #available(SwiftStdlib 6.0, *) else { return }
+    func bits(_ s: String) -> BitArray { BitArray(s)! }
+    func ones(_ n: Int) -> String { String(repeating: "1", count: n) }
+    func zeros(_ n: Int) -> String { String(repeating: "0", count: n) }
+
+    let cases: [(bits: BitArray, signed: Int128, unsigned: UInt128)] = [
+      ("", 0, 0),
+      ("1", -1, 1),
+      ("01", 1, 1),
+      ("10", -2, 2),
+      ("101", -3, 5),
+      (bits(ones(64)), -1, UInt128(UInt64.max)),
+      (bits("1" + zeros(63)), -1 << 63, 1 << 63),
+      (bits("0" + ones(64)), Int128(UInt64.max), UInt128(UInt64.max)),
+      (bits("1" + zeros(64)), -1 << 64, 1 << 64),
+      (bits(ones(65)), -1, (1 << 65) - 1),
+      (bits("1" + zeros(127)), .min, 1 << 127),
+      (bits("0" + ones(127)), .max, UInt128(Int128.max)),
+      (bits(ones(128)), -1, .max),
+      (bits("0" + ones(128)), -1, .max),
+      (bits("11" + zeros(128)), 0, 0),
+    ]
+    withEvery("pair", in: cases) { (bits, signed, unsigned) in
+      expectEqual(Int128(truncatingIfNeeded: bits), signed)
+      expectEqual(UInt128(truncatingIfNeeded: bits), unsigned)
+    }
+
+    let exactCases: [(bits: BitArray, signed: Int128?, unsigned: UInt128?)] = [
+      ("", 0, 0),
+      ("1", -1, 1),
+      ("10", -2, 2),
+      (bits(ones(64)), -1, UInt128(UInt64.max)),
+      (bits("1" + zeros(64)), -1 << 64, 1 << 64),
+      (bits("1" + zeros(127)), .min, 1 << 127),
+      (bits(ones(128)), -1, .max),
+      (bits(ones(200)), -1, nil),
+      (bits("0" + ones(128)), nil, .max),
+      (bits("10" + zeros(127)), nil, nil),
+    ]
+    withEvery("pair", in: exactCases) { (bits, signed, unsigned) in
+      expectEqual(Int128(exactly: bits), signed)
+      expectEqual(UInt128(exactly: bits), unsigned)
+      if let signed { expectEqual(Int128(bits), signed) }
+      if let unsigned { expectEqual(UInt128(bits), unsigned) }
+    }
+  }
+
   func test_init_BitSet() {
     expectEqualElements(BitArray(BitSet([])), [])
     expectEqualElements(BitArray(BitSet([0])), [true])
@@ -1018,6 +1066,87 @@ final class BitArrayTests: CollectionTestCase {
         - false
 
       """)
+  }
+
+  func test_resizingShiftRight_matches_removeFirst() {
+    withEvery("count", in: [1, 2, 31, 32, 33, 63, 64, 65, 127, 128, 129, 200]) { count in
+      let bools = randomBoolArray(count: count)
+      withEvery("amount", in: 0 ... (count + 2)) { amount in
+        var a = BitArray(bools)
+        a.resizingShiftRight(by: amount)
+        expectEqual(
+          a.count, Swift.max(count - amount, 0),
+          "count: \(count), amount: \(amount)")
+        expectEqualElements(
+          a, bools.dropFirst(Swift.min(amount, count)),
+          "count: \(count), amount: \(amount)")
+      }
+    }
+  }
+
+  func test_resizingShiftRight_byNegativeAmount_matches_shiftLeft() {
+    withEvery("count", in: [1, 31, 32, 33, 64, 65, 129]) { count in
+      let bools = randomBoolArray(count: count)
+      withEvery("amount", in: stride(from: -1, through: 0 - count - 2, by: -1)) { amount in
+        var a = BitArray(bools)
+        a.resizingShiftRight(by: amount)
+        expectEqual(a.count, count - amount, "count: \(count), amount: \(amount)")
+        expectEqualElements(
+          a, Array(repeating: false, count: -amount) + bools,
+          "count: \(count), amount: \(amount)")
+      }
+    }
+  }
+
+  func test_resizingShiftLeft_byPositiveAmount_inserts_false_values() {
+    withEvery("count", in: [0, 1, 31, 32, 33, 64, 65, 129]) { count in
+      let bools = randomBoolArray(count: count)
+      withEvery("amount", in: 1 ... (count + 2)) { amount in
+        var a = BitArray(bools)
+        a.resizingShiftLeft(by: amount)
+        expectEqual(a.count, count + amount, "count: \(count), amount: \(amount)")
+        expectEqualElements(
+          a, Array(repeating: false, count: amount) + bools,
+          "count: \(count), amount: \(amount)")
+      }
+    }
+  }
+
+  func test_resizingShiftLeft_byNegativeAmount_matches_removeFirst() {
+    withEvery("count", in: [1, 2, 31, 32, 33, 63, 64, 65, 127, 128, 129, 200]) { count in
+      let bools = randomBoolArray(count: count)
+      withEvery("amount", in: stride(from: -1, through: 0 - count - 2, by: -1)) { amount in
+        var a = BitArray(bools)
+        a.resizingShiftLeft(by: amount)
+        expectEqual(
+          a.count, Swift.max(count + amount, 0),
+          "count: \(count), amount: \(amount)")
+        expectEqualElements(
+          a, bools.dropFirst(Swift.min(-amount, count)),
+          "count: \(count), amount: \(amount)")
+      }
+    }
+  }
+
+  func test_resizingShift_docExamples() {
+    do {
+      var bits: BitArray = "1110110"
+      bits.resizingShiftLeft(by: 2)
+      expectEqual("\(bits)", "<111011000>")
+      bits.resizingShiftLeft(by: -4)
+      expectEqual("\(bits)", "<11101>")
+      bits.resizingShiftLeft(by: 8)
+      expectEqual("\(bits)", "<1110100000000>")
+    }
+    do {
+      var bits: BitArray = "1110110"
+      bits.resizingShiftRight(by: 2)
+      expectEqual("\(bits)", "<11101>")
+      bits.resizingShiftRight(by: -4)
+      expectEqual("\(bits)", "<111010000>")
+      bits.resizingShiftRight(by: 10)
+      expectEqual("\(bits)", "<>")
+    }
   }
 
 }
